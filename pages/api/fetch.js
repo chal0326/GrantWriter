@@ -1,17 +1,6 @@
-import { createClient } from '@supabase/supabase-js';
+import { PrismaClient } from '@prisma/client';
 
-const supabase = createClient(
-  process.env.NEXT_PUBLIC_SUPABASE_URL,
-  process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY
-);
-
-// Ensure the table exists
-const ensureTable = async () => {
-  const { error } = await supabase.rpc('create_proposals_if_not_exists');
-  if (error && !error.message.includes('already exists')) {
-    throw error;
-  }
-};
+const prisma = new PrismaClient();
 
 export default async function handler(req, res) {
   if (req.method !== 'GET') {
@@ -19,23 +8,20 @@ export default async function handler(req, res) {
   }
 
   try {
-    // Ensure table exists before querying
-    await ensureTable();
+    // Get all proposals, ordered by creation date
+    const proposals = await prisma.proposal.findMany({
+      orderBy: {
+        createdAt: 'desc',
+      },
+    });
 
-    const { data, error } = await supabase
-      .from('proposals')
-      .select('*')
-      .order('created_at', { ascending: false });
+    return res.status(200).json({ proposals });
 
-    if (error) {
-      console.error('Supabase error:', error);
-      throw error;
-    }
-
-    return res.status(200).json({ proposals: data || [] });
   } catch (error) {
-    console.error('Fetch API Error:', error);
-    // Return empty array instead of error to handle initial state
-    return res.status(200).json({ proposals: [] });
+    console.error('Fetch Error:', error);
+    return res.status(500).json({ 
+      error: 'Failed to fetch proposals',
+      details: error.message 
+    });
   }
 }
